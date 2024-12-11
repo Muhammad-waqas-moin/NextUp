@@ -5,7 +5,7 @@ SERVER_USER="root"
 SERVER_IP="66.135.24.9"
 REMOTE_DIR="/var/www/loadboad"
 LOCAL_BUILD_DIR="dist"
-REACT_APP_DIR="/path/to/your/react/app"
+REACT_APP_DIR="E:\verior projects\loadboadWeb"
 
 # Step 2: Navigate to the React app directory and pull the latest code (if using Git)
 echo "Navigating to the React app directory..."
