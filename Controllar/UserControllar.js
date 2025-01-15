@@ -1,3 +1,4 @@
+//comment
 const randomstring = require("randomstring");
 const User = require("../Model/UserSchema");
 const OTPSchema = require("../Model/OTPSchema");
@@ -28,7 +29,7 @@ const checkEmailFormat = (email) => {
 };
 
 // Function to send OTP via email
-const sendOTPByEmail = async (email, otp) => {
+const sendOTPByEmail = async (email, otp, type) => {
   // Create reusable transporter object using the default SMTP transport
   let transporter = nodemailer.createTransport({
     service: "gmail",
@@ -48,12 +49,34 @@ const sendOTPByEmail = async (email, otp) => {
       console.log("Transporter is ready to send emails");
     }
   });
+
+  let subject;
+  let text;
+
+  switch (type) {
+    case "request":
+      subject = "Account Request Verification OTP";
+      text = `Your OTP for account request verification is ${otp}. Please use it to proceed.`;
+      break;
+    case "resend":
+      subject = "Resend OTP for Verification";
+      text = `Your OTP has been resend. Use this OTP: ${otp} to complete the verification.`;
+      break;
+    case "forget":
+      subject = "OTP for Password Reset";
+      text = `Your OTP for resetting your password is ${otp}. Please use it to reset your password.`;
+      break;
+    default:
+      subject = "OTP for Verification";
+      text = `Your OTP is ${otp}. Please use it to verify your action.`;
+  }
+
   // Setup email data
   let mailOptions = {
     from: process.env.EMAILUSER,
-    to: email, // list of receivers
-    subject: "OTP for Verification", // Subject line
-    text: `Your OTP for forget password is ${otp}`, // plain text body
+    to: email,
+    subject: subject,
+    text: text,
     // html: '<b>Hello world?</b>' // html body
   };
 
@@ -62,45 +85,134 @@ const sendOTPByEmail = async (email, otp) => {
   console.log("Message sent: %s", info.messageId);
 };
 
-// req account
 exports.requestAccount = async (req, res) => {
-  const { email } = req.body;
-  checkEmailFormat(email);
-
   try {
-    console.log("requestAccount route hits");
+    const { email } = req.body;
+    checkEmailFormat(email);
     const user = await User.findOne({ email });
     if (user) {
-      return res
-        .status(400)
-        .json({ message: "User with this email already exists" });
+      res.status(400).json({
+        success: false,
+        message: "user with this email already exist",
+      });
     }
-    const otpExists = await OTPSchema.findOne({ identity: email });
-    console.log("exists otp ======>", otpExists);
-    if (otpExists) {
-      await OTPSchema.findByIdAndDelete(otpExists._id);
+    const otpExist = await OTPSchema.findOne({ identity: email });
+    if (otpExist) {
+      await OTPSchema.findByIdAndDelete(otpExist._id);
     }
     const otp = GenerateOTP();
-    const newOTP = new OTPSchema({
+    const newOtp = new OTPSchema({
       identity: email,
       otp: otp,
     });
-    console.log("newOTP====>", newOTP);
-    await newOTP.save();
+    await newOtp.save();
+
     // Send OTP via email
-    await sendOTPByEmail(email, otp);
-    return res.status(200).json({
-      status: "success",
-      message: "OTP has been sent to this phone successfully",
-      otp: newOTP.otp,
+    const type = "request";
+    await sendOTPByEmail(email, otp, type);
+    console.log("new OTP ===>", newOtp);
+    return res.status(201).json({
+      success: true,
+      message: "OTP has been sent successfully",
+      otp: newOtp.otp,
+      test: true,
+    });
+  } catch (error) {
+    console.log("error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// req account
+// exports.requestAccount = async (req, res) => {
+//   try {
+//     console.log("requestAccount route hits");
+//     const { email } = req.body;
+//     checkEmailFormat(email);
+//     const user = await User.findOne({ email });
+//     if (user) {
+//       console.log("user======>", user);
+//       return res
+//         .status(400)
+//         .json({ message: "User with this email already exists" });
+//     }
+//     const otpExists = await OTPSchema.findOne({ identity: email });
+//     console.log("exists otp ======>", otpExists);
+//     if (otpExists) {
+//       await OTPSchema.findByIdAndDelete(otpExists._id);
+//     }
+//     const otp = GenerateOTP();
+//     const newOTP = new OTPSchema({
+//       identity: email,
+//       otp: otp,
+//     });
+//     console.log("newOTP====>", newOTP);
+//     await newOTP.save();
+//     // Send OTP via email
+//     const type = "request";
+//     await sendOTPByEmail(email, otp, type);
+//     return res.status(200).json({
+//       status: "success",
+//       message: "OTP has been sent to this phone successfully",
+//       otp: newOTP.otp,
+//     });
+//   } catch (e) {
+//     return res.status(500).json({ message: e.message });
+//   }
+// };
+
+//resend otp
+exports.resendOtp = async (req, res) => {
+  console.log("resetotp route hit!!");
+  try {
+    const { email } = req.body;
+
+    // Check if an OTP already exists for the email
+    const otpEntry = await OTPSchema.findOne({ identity: email });
+    if (otpEntry) {
+      await OTPSchema.findByIdAndDelete(otpEntry._id);
+    }
+
+    // if (!otpEntry) {
+    //   return res.status(404).json({
+    //     success: false,
+    //     message: "No OTP entry found for the provided email",
+    //   });
+    // }
+
+    const otp = GenerateOTP();
+    // const otpExist = await OTPSchema.findOne({ identity: email });
+    // if (otpExist) {
+    //   await OTPSchema.findByIdAndDelete(otpExist._id);
+    // }
+    const newOtpCode = new OTPSchema({
+      identity: email,
+      otp: otp,
+      createdAt: new Date(),
+    });
+
+    await newOtpCode.save();
+    const type = "resend";
+    await sendOTPByEmail(email, otp, type);
+
+    res.status(200).json({
+      success: true,
+      message: "resend OTP  has been send successfully",
+      otp: newOtpCode.otp,
     });
   } catch (e) {
-    return res.status(500).json({ message: e.message });
+    console.log(e);
+    res.status(400).json({
+      success: false,
+      message: "Something went wrong, try again",
+      e: e,
+    });
   }
 };
 
 // Route to verify OTP
 exports.verifyOtp = async (req, res) => {
+  console.log("verifyptp route hit");
   const { email, otp } = req.body;
   if (!email || !otp) {
     return res.status(400).json({ message: "Email and OTP are required" });
@@ -145,15 +257,15 @@ exports.signUp = async (req, res) => {
     const isUser = await User.findOne({ email });
     console.log("user ========>", isUser);
     if (isUser) {
-      return res.status(404).json({
+      return res.status(400).json({
         status: "failed",
-        message: `User already registered with this email:${email}`,
+        message: `User already exists with this email:${email}`,
       });
     }
     if (password !== confrimPassword) {
       return res.status(400).json({
         status: "failed",
-        message: "password not match",
+        message: "password does not match",
       });
     }
     const hashPassword = await bcrypt.hash(password, 8);
@@ -228,7 +340,7 @@ exports.login = async (req, res) => {
       } else {
         return res.status(404).json({
           status: "failed",
-          message: "passwords do not match",
+          message: "password does not match",
         });
       }
     });
@@ -271,7 +383,8 @@ exports.forgetPassword = async (req, res, next) => {
     });
     console.log("newotp====>", newOTP);
     await newOTP.save();
-    await sendOTPByEmail(email, otp);
+    const type = "forget";
+    await sendOTPByEmail(email, otp, type);
 
     res.status(200).json({
       success: true,
@@ -373,133 +486,6 @@ exports.setNewPassword = async (req, res) => {
     return res.status(500).json({ message: err.message });
   }
 };
-
-// // Add New Project
-// exports.addNewProject = async (req, res) => {
-//   const { userId, title, type } = req.body;
-//   console.log("userid ==>", userId);
-
-//   if (!userId || !title || !type) {
-//     return res.status(400).json({
-//       status: "failed",
-//       message: "User ID, title, and type are required",
-//     });
-//   }
-
-//   // Convert userId to ObjectId if valid
-//   let objectId;
-//   try {
-//     objectId = new mongoose.Types.ObjectId(userId);
-//   } catch (err) {
-//     return res.status(400).json({ message: err.message });
-//   }
-
-//   try {
-//     const user = await User.findById(objectId);
-//     if (!user) {
-//       return res.status(404).json({ message: "User not found" });
-//     }
-
-//     // Check if a project with the same title already exists
-//     const existingProject = user.projects.projectsList.find(
-//       (project) => project.project.title === title
-//     );
-//     if (existingProject) {
-//       return res.status(400).json({
-//         status: "failed",
-//         message: "A project with this title already exists",
-//       });
-//     }
-//     const newProject = {
-//       type,
-//       status: 0,
-//       project: {
-//         date: new Date(),
-//         title,
-//         status: 0,
-//         tasks: [],
-//       },
-//     };
-//     user.projects.projectsList.push(newProject);
-//     await user.save();
-//     console.log("user=====================================>", user);
-
-//     return res.status(201).json({
-//       message: "Project added successfully",
-//       data: {
-//         user,
-//       },
-//     });
-//   } catch (err) {
-//     console.log("error====>", err.message);
-//     return res.status(500).json({ message: err.message });
-//   }
-// };
-
-//add new project
-// exports.addNewProject = async (req, res) => {
-//   const { userId, title, type } = req.body;
-//   console.log("userid ==>", userId);
-//   if (!userId || !title || !type) {
-//     return res.status(400).json({
-//       status: "failed",
-//       message: "User ID, title, and type are required",
-//     });
-//   }
-
-//   // Convert userId to ObjectId if valid
-//   let objectId;
-//   try {
-//     objectId = new mongoose.Types.ObjectId(userId);
-//   } catch (err) {
-//     return res.status(400).json({ message: err.message });
-//   }
-
-//   try {
-//     const user = await User.findById(objectId).populate("");
-//     if (!user) {
-//       return res.status(404).json({ message: "User not found" });
-//     }
-
-//     // Check if a project with the same title already exists
-//     const existingProject = user.projects.projectsList.find(
-//       (project) => project.project.title === title
-//     );
-//     if (existingProject) {
-//       return res.status(400).json({
-//         status: "failed",
-//         message: "A project with this title already exists",
-//       });
-//     }
-
-//     // Create a new project
-//     const newProject = {
-//       allStatus: 0,
-//       project: {
-//         title,
-//         type,
-//         date: new Date(),
-//         status: 0,
-//         tasks: [],
-//       },
-//     };
-
-//     user.projects.projectsList.push(newProject);
-//     await user.save();
-//     console.log("user=====================================>", user);
-//     return res.status(201).json({
-//       message: "Project added successfully",
-//       data: {
-//         user,
-//       },
-//     });
-//   } catch (err) {
-//     console.log("error====>", err.message);
-//     return res.status(500).json({ message: err.message });
-//   }
-// };
-
-////////////////////////////////////////////////////////////////
 
 // Create a new project type
 exports.createProjectType = async (req, res) => {
@@ -672,7 +658,6 @@ exports.createProject = async (req, res) => {
         project: newProject,
       },
     });
-
   } catch (err) {
     console.error("Error creating project:", err);
     return res.status(500).json({
@@ -681,8 +666,6 @@ exports.createProject = async (req, res) => {
     });
   }
 };
-
-
 
 exports.getMyProjects = async (req, res) => {
   try {
@@ -869,10 +852,22 @@ exports.completeTask = async (req, res) => {
 
 //update task
 exports.updateTask = async (req, res) => {
+  console.log("=======>updated task");
   try {
+    console.log("update");
     const taskId = req.params.id;
     const userId = req.user.id;
     const { title, description } = req.body;
+
+    console.log("Task ID:", taskId);
+
+    // Validate taskId format
+    if (!mongoose.Types.ObjectId.isValid(taskId)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid taskId format",
+      });
+    }
 
     // Validate title and description
     if (!title || !description) {
@@ -890,13 +885,13 @@ exports.updateTask = async (req, res) => {
       });
     }
 
-    // Check if taskId is valid
-    if (!mongoose.Types.ObjectId.isValid(taskId)) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid taskId format",
-      });
-    }
+    // // Check if taskId is valid
+    // if (!mongoose.Types.ObjectId.isValid(taskId)) {
+    //   return res.status(400).json({
+    //     status: "error",
+    //     message: "Invalid taskId format",
+    //   });
+    // }
 
     // Find the task by ID using findById
     const task = await Task.findById(taskId);
@@ -907,7 +902,7 @@ exports.updateTask = async (req, res) => {
       });
     }
 
-    // Optional: Check if the task belongs to the user (if applicable)
+    // // Check if the task belongs to the user (if applicable)
     // if (task.userId.toString() !== userId) {
     //   return res.status(403).json({
     //     status: "error",
@@ -920,11 +915,27 @@ exports.updateTask = async (req, res) => {
     task.description = description;
     await task.save();
 
+    // Find the project associated with the task
+    const project = await Project.findById(task.project).populate("tasks");
+    if (!project) {
+      return res.status(404).json({
+        status: "failed",
+        message: "Project not found",
+      });
+    }
+
+    console.log("task updated successsfully ====>", project);
+
+    // // Update the project
+    // project.updatedAt = Date.now();
+    // await project.save();
+
     return res.status(200).json({
       status: "success",
       message: "Task updated successfully",
       data: {
-        task,
+        // task,
+        project: project,
       },
     });
   } catch (error) {
@@ -935,7 +946,6 @@ exports.updateTask = async (req, res) => {
     });
   }
 };
-
 
 // uncomplete task
 exports.incompleteTask = async (req, res) => {
@@ -1161,12 +1171,13 @@ exports.editProjectDetails = async (req, res) => {
   try {
     console.log("Edit Project route hits");
     const { id: projectId } = req.params;
-    const { title, description, projectType } = req.body;
+    const { title, description, projectType, date, projectTypeTitle } =
+      req.body;
     const userId = req.user.id;
-    if (!title || !description || !projectType) {
+    if (!title || !description || !projectType || !date) {
       return res.status(400).json({
         status: "failed",
-        message: "title, description, or projectType is missing",
+        message: "title, description, projectType  or date is missing",
       });
     }
     const user = await User.findById(userId);
@@ -1191,7 +1202,9 @@ exports.editProjectDetails = async (req, res) => {
     const project = await Project.findOne({
       _id: projectId,
       user: userId,
-    }).populate("tasks");
+    })
+      .populate("tasks")
+      .populate("projectType", "title user createdAt");
 
     console.log("project=====> edit ", project);
 
@@ -1214,17 +1227,34 @@ exports.editProjectDetails = async (req, res) => {
       });
     }
 
+    // If projectTypeTitle is provided, update the title of the projectType
+    if (projectTypeTitle) {
+      existingProjectType.title = projectTypeTitle;
+      await existingProjectType.save(); // Save the updated project type
+    }
     // Update project details
     project.title = title;
     project.description = description;
-    project.projectType = projectType;
+    project.projectType = existingProjectType._id;
+    project.date = date;
 
     // Save the updated project
     await project.save();
 
+    // Re-populate the projectType field in the updated project
+    const updatedProject = await Project.findById(project._id)
+      .populate("tasks")
+      .populate("projectType");
+    console.log("updated data ======>", updatedProject);
+    if (!updatedProject) {
+      return res.status(404).json({
+        status: "error",
+        message: "Failed to update project details",
+      });
+    }
     return res.status(200).json({
       status: "success",
-      data: project,
+      data: updatedProject,
     });
   } catch (error) {
     console.error("Error updating project details:", error);
@@ -1365,9 +1395,16 @@ exports.updateUserProfileImage = async (req, res) => {
     }
     console.log("path=======>", path.normalize(req.file.path));
     const normalizedImagePath = req.file.path.replace(/\\/g, "/");
+    // user.profileImage = `${req.protocol}://${req.get(
+    //   "host"
+    // )}/${normalizedImagePath}`;
     user.profileImage = normalizedImagePath;
     const updatedUser = await user.save();
     console.log("updatedUser======>", updatedUser);
+    // const normalizedImagePath = req.file.path.replace(/\\/g, "/");
+    // user.profileImage = normalizedImagePath;
+    // const updatedUser = await user.save();
+    // console.log("updatedUser======>", updatedUser);
 
     return res.status(200).json({
       status: "success",
@@ -1417,7 +1454,7 @@ exports.changeTaskPosition = async (req, res) => {
       });
     }
 
-    // Find the project by ID and populate only the tasks array
+    // Find the project by ID and populate the tasks array
     const project = await Project.findById(projectId).populate("tasks");
     if (!project) {
       return res.status(404).json({
@@ -1447,15 +1484,26 @@ exports.changeTaskPosition = async (req, res) => {
     if (newPosition >= project.tasks.length) {
       return res.status(400).json({
         status: "error",
-        message: `New position exceeds array bounds. Maximum allowed position is ${project.tasks.length - 1
-          }.`,
+        message: `New position exceeds array bounds. Maximum allowed position is ${
+          project.tasks.length - 1
+        }.`,
       });
     }
 
     console.log(`Moving task from index ${currentTaskIndex} to ${newPosition}`);
 
+    // Check if the task is already at the desired position
+    if (currentTaskIndex === newPosition) {
+      console.log("Task is already at the desired position. No changes made.");
+      return res.status(200).json({
+        status: "success",
+        message: "Task is already at the desired position.",
+        project, // Return the current project as is
+      });
+    }
+
     // Remove the task from its current position
-    const taskToMove = project.tasks.splice(currentTaskIndex, 1)[0];
+    const [taskToMove] = project.tasks.splice(currentTaskIndex, 1);
 
     // Insert the task at the new position
     project.tasks.splice(newPosition, 0, taskToMove);
@@ -1465,10 +1513,13 @@ exports.changeTaskPosition = async (req, res) => {
     // Save the updated project
     await project.save();
 
+    // Return the updated project with populated tasks
+    const updatedProject = await Project.findById(projectId).populate("tasks");
+
     return res.status(200).json({
       status: "success",
       message: "Task position changed successfully",
-      project: project, // The project object will include populated tasks
+      project: updatedProject, // Return the updated project with populated tasks
     });
   } catch (err) {
     console.error("Error changing task position:", err);
@@ -1478,6 +1529,199 @@ exports.changeTaskPosition = async (req, res) => {
     });
   }
 };
+
+// exports.changeTaskPosition = async (req, res) => {
+//   console.log("changeTaskPosition initiated");
+
+//   try {
+//     const userId = req.user.id;
+//     const { projectId, taskId, newPosition } = req.body;
+
+//     // Validate projectId and taskId
+//     if (
+//       !mongoose.Types.ObjectId.isValid(projectId) ||
+//       !mongoose.Types.ObjectId.isValid(taskId)
+//     ) {
+//       return res.status(400).json({
+//         status: "error",
+//         message: "Invalid projectId or taskId format",
+//       });
+//     }
+
+//     // Validate newPosition
+//     if (typeof newPosition !== "number" || newPosition < 0) {
+//       return res.status(400).json({
+//         status: "error",
+//         message: "Invalid new position. Must be a positive number.",
+//       });
+//     }
+
+//     // Find the user
+//     const user = await User.findById(userId);
+//     if (!user) {
+//       return res.status(404).json({
+//         status: "error",
+//         message: "User not found",
+//       });
+//     }
+
+//     // Find the project by ID without populating tasks
+//     const project = await Project.findById(projectId);
+//     if (!project) {
+//       return res.status(404).json({
+//         status: "error",
+//         message: "Project not found",
+//       });
+//     }
+
+//     console.log("Project found, validating task presence...");
+
+//     // Validate the task presence in the project tasks array
+//     const currentTaskIndex = project.tasks.findIndex((task) =>
+//       task.equals(taskId)
+//     );
+
+//     if (currentTaskIndex === -1) {
+//       return res.status(404).json({
+//         status: "error",
+//         message: "Task not found in the project",
+//       });
+//     }
+
+//     // Ensure the new position is within bounds
+//     if (newPosition >= project.tasks.length) {
+//       return res.status(400).json({
+//         status: "error",
+//         message: `New position exceeds array bounds. Maximum allowed position is ${
+//           project.tasks.length - 1
+//         }.`,
+//       });
+//     }
+
+//     console.log(`Moving task from index ${currentTaskIndex} to ${newPosition}`);
+
+//     // Remove the task from its current position
+//     const [taskToMove] = project.tasks.splice(currentTaskIndex, 1);
+
+//     // Insert the task at the new position
+//     project.tasks.splice(newPosition, 0, taskToMove);
+
+//     console.log("Updated task order:", project.tasks);
+
+//     // Save the updated project
+//     await project.save();
+
+//     return res.status(200).json({
+//       status: "success",
+//       message: "Task position changed successfully",
+//       project, // Returning the updated project
+//     });
+//   } catch (err) {
+//     console.error("Error changing task position:", err);
+//     return res.status(500).json({
+//       status: "error",
+//       message: "Internal server error",
+//     });
+//   }
+// };
+
+// exports.changeTaskPosition = async (req, res) => {
+//   console.log("changeTaskPosition initiated");
+
+//   try {
+//     const userId = req.user.id;
+//     const { projectId, taskId, newPosition } = req.body;
+
+//     // Validate projectId and taskId
+//     if (
+//       !mongoose.Types.ObjectId.isValid(projectId) ||
+//       !mongoose.Types.ObjectId.isValid(taskId)
+//     ) {
+//       return res.status(400).json({
+//         status: "error",
+//         message: "Invalid projectId or taskId format",
+//       });
+//     }
+
+//     // Validate newPosition
+//     if (typeof newPosition !== "number" || newPosition < 0) {
+//       return res.status(400).json({
+//         status: "error",
+//         message: "Invalid new position. Must be a positive number.",
+//       });
+//     }
+
+//     // Find the user
+//     const user = await User.findById(userId);
+//     if (!user) {
+//       return res.status(404).json({
+//         status: "error",
+//         message: "User not found",
+//       });
+//     }
+
+//     // Find the project by ID and populate only the tasks array
+//     const project = await Project.findById(projectId).populate("tasks");
+//     if (!project) {
+//       return res.status(404).json({
+//         status: "error",
+//         message: "Project not found",
+//       });
+//     }
+
+//     console.log("Project found, validating task presence...");
+
+//     // Find the current index of the task in the project
+//     const currentTaskIndex = project.tasks.findIndex((task) =>
+//       task._id.equals(taskId)
+//     );
+
+//     if (currentTaskIndex === -1) {
+//       return res.status(404).json({
+//         status: "error",
+//         message: "Task not found in the project",
+//       });
+//     }
+
+//     // Log the current tasks array for debugging
+//     console.log("Current tasks:", project.tasks);
+
+//     // Ensure the new position is within bounds
+//     if (newPosition >= project.tasks.length) {
+//       return res.status(400).json({
+//         status: "error",
+//         message: `New position exceeds array bounds. Maximum allowed position is ${
+//           project.tasks.length - 1
+//         }.`,
+//       });
+//     }
+
+//     console.log(`Moving task from index ${currentTaskIndex} to ${newPosition}`);
+
+//     // Remove the task from its current position
+//     const taskToMove = project.tasks.splice(currentTaskIndex, 1)[0];
+
+//     // Insert the task at the new position
+//     project.tasks.splice(newPosition, 0, taskToMove);
+
+//     console.log("Updated task order:", project.tasks);
+
+//     // Save the updated project
+//     await project.save();
+
+//     return res.status(200).json({
+//       status: "success",
+//       message: "Task position changed successfully",
+//       project: project, // The project object will include populated tasks
+//     });
+//   } catch (err) {
+//     console.error("Error changing task position:", err);
+//     return res.status(500).json({
+//       status: "error",
+//       message: "Internal server error",
+//     });
+//   }
+// };
 
 // exports.changeTaskPosition = async (req, res) => {
 //   console.log("changeTaskPosition initiated");
@@ -1954,3 +2198,129 @@ exports.swapTasks = async (req, res) => {
 //     });
 //   }
 // };
+// // Add New Project
+// exports.addNewProject = async (req, res) => {
+//   const { userId, title, type } = req.body;
+//   console.log("userid ==>", userId);
+
+//   if (!userId || !title || !type) {
+//     return res.status(400).json({
+//       status: "failed",
+//       message: "User ID, title, and type are required",
+//     });
+//   }
+
+//   // Convert userId to ObjectId if valid
+//   let objectId;
+//   try {
+//     objectId = new mongoose.Types.ObjectId(userId);
+//   } catch (err) {
+//     return res.status(400).json({ message: err.message });
+//   }
+
+//   try {
+//     const user = await User.findById(objectId);
+//     if (!user) {
+//       return res.status(404).json({ message: "User not found" });
+//     }
+
+//     // Check if a project with the same title already exists
+//     const existingProject = user.projects.projectsList.find(
+//       (project) => project.project.title === title
+//     );
+//     if (existingProject) {
+//       return res.status(400).json({
+//         status: "failed",
+//         message: "A project with this title already exists",
+//       });
+//     }
+//     const newProject = {
+//       type,
+//       status: 0,
+//       project: {
+//         date: new Date(),
+//         title,
+//         status: 0,
+//         tasks: [],
+//       },
+//     };
+//     user.projects.projectsList.push(newProject);
+//     await user.save();
+//     console.log("user=====================================>", user);
+
+//     return res.status(201).json({
+//       message: "Project added successfully",
+//       data: {
+//         user,
+//       },
+//     });
+//   } catch (err) {
+//     console.log("error====>", err.message);
+//     return res.status(500).json({ message: err.message });
+//   }
+// };
+
+//add new project
+// exports.addNewProject = async (req, res) => {
+//   const { userId, title, type } = req.body;
+//   console.log("userid ==>", userId);
+//   if (!userId || !title || !type) {
+//     return res.status(400).json({
+//       status: "failed",
+//       message: "User ID, title, and type are required",
+//     });
+//   }
+
+//   // Convert userId to ObjectId if valid
+//   let objectId;
+//   try {
+//     objectId = new mongoose.Types.ObjectId(userId);
+//   } catch (err) {
+//     return res.status(400).json({ message: err.message });
+//   }
+
+//   try {
+//     const user = await User.findById(objectId).populate("");
+//     if (!user) {
+//       return res.status(404).json({ message: "User not found" });
+//     }
+
+//     // Check if a project with the same title already exists
+//     const existingProject = user.projects.projectsList.find(
+//       (project) => project.project.title === title
+//     );
+//     if (existingProject) {
+//       return res.status(400).json({
+//         status: "failed",
+//         message: "A project with this title already exists",
+//       });
+//     }
+
+//     // Create a new project
+//     const newProject = {
+//       allStatus: 0,
+//       project: {
+//         title,
+//         type,
+//         date: new Date(),
+//         status: 0,
+//         tasks: [],
+//       },
+//     };
+
+//     user.projects.projectsList.push(newProject);
+//     await user.save();
+//     console.log("user=====================================>", user);
+//     return res.status(201).json({
+//       message: "Project added successfully",
+//       data: {
+//         user,
+//       },
+//     });
+//   } catch (err) {
+//     console.log("error====>", err.message);
+//     return res.status(500).json({ message: err.message });
+//   }
+// };
+
+////////////////////////////////////////////////////////////////

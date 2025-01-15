@@ -1,7 +1,8 @@
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 dotenv.config();
-console.log(process.env);
+
+console.log("Loaded Environment Variables:", process.env.DATABASE_URL);
 const dbUrl = process.env.DATABASE_URL;
 
 const databaseConnection = () => {

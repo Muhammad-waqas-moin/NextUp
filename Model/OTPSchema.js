@@ -11,10 +11,10 @@ const OTPSchema = mongoose.Schema({
     required: true,
     // default: "",
   },
-  expiresAt: {
-    type: Date,
-    default: Date.now,
-    expires: 900,
-  },
+    expiresAt: {
+      type: Date,
+      default: Date.now,
+      expires: 900,
+    },
 });
 module.exports = mongoose.model("OTPSchema", OTPSchema);

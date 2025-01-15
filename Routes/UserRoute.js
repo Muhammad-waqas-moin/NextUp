@@ -3,6 +3,7 @@ const express = require("express");
 const app = express();
 const {
   requestAccount,
+  resendOtp,
   verifyOtp,
   signUp,
   login,
@@ -35,9 +36,8 @@ const Router = express.Router();
 //Routes
 //testing
 
-
-
 Router.post("/request-account", requestAccount);
+Router.post("/resend-OTP", resendOtp);
 Router.post("/verify-OTP", verifyOtp);
 Router.post("/signup", signUp);
 Router.post("/login", login);
@@ -66,7 +66,12 @@ Router.post("/change-task-position", auth, changeTaskPosition);
 // detele projecttype
 Router.delete("/delete-projectType/:id", auth, deleteProjectType);
 Router.post("/change-password", auth, changePassword);
-Router.put("/update-profile-image", auth, upload.single("image"), updateUserProfileImage);
+Router.put(
+  "/update-profile-image",
+  auth,
+  upload.single("image"),
+  updateUserProfileImage
+);
 
 //
 

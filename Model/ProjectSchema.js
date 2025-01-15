@@ -127,10 +127,10 @@ const ProjectSchema = new Schema({
     required: true,
   },
   status: { type: Boolean, default: false },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
+  // createdAt: {
+  //   type: Date,
+  //   default: Date.now,
+  // },
   projectType: {
     type: Schema.Types.ObjectId,
     ref: "ProjectType",
@@ -146,7 +146,11 @@ const ProjectSchema = new Schema({
     type: Date,
     default: Date.now,
     required: true,
-  }
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
 module.exports = mongoose.model("Project", ProjectSchema);
